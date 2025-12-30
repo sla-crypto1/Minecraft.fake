@@ -3,37 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Vida de Aldeão TD</title>
+    <title>Vida de Aldeão 3D</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
-    <div id="top-ui">
-        <div class="stat-box">🌙 Noite: <span id="night-count">1</span></div>
-        <div class="stat-box">⏳ Tempo: <span id="time-left">60</span>s</div>
-        <div class="stat-box">🌾 Trigo: <span id="wheat-count">0</span></div>
-    </div>
+    <div id="ui-layer">
+        <div id="top-ui">
+            <div class="stat-box">🌙 Noite: <span id="night-count">1</span></div>
+            <div class="stat-box">⏳ <span id="time-left">60</span>s</div>
+            <div class="stat-box">🌾 <span id="wheat-count">0</span></div>
+        </div>
 
-    <canvas id="gameCanvas"></canvas>
+        <div id="crosshair">+</div>
 
-    <div id="shop-modal" class="hidden">
-        <h2>🏪 Loja do Aldeão</h2>
-        <button onclick="buyItem('seed')">🌱 Semente (1 Trigo)</button>
-        <button onclick="buyItem('dirt')">🟫 Bloco de Terra (5 Trigo)</button>
-        <button onclick="buyItem('golem')">🤖 Golem de Ferro (50 Trigo)</button>
-        <hr>
-        <h3>⚔️ Ferreiro</h3>
-        <p>Atual: <span id="sword-name">Madeira</span></p>
-        <button onclick="upgradeSword()">Evoluir Espada (200 Trigo)</button>
-        <button class="close-btn" onclick="toggleShop()">Fechar</button>
-    </div>
+        <div id="shop-modal" class="hidden">
+            <h2>🏪 Loja 3D</h2>
+            <button onclick="buyItem('seed')">🌱 Semente (1 Trigo)</button>
+            <button onclick="buyItem('dirt')">🟫 Bloco Terra (5 Trigo)</button>
+            <button onclick="buyItem('golem')">🤖 Golem (50 Trigo)</button>
+            <hr>
+            <h3>⚔️ Ferreiro</h3>
+            <p>Espada: <span id="sword-name">Madeira</span></p>
+            <button onclick="upgradeSword()">Evoluir (200 Trigo)</button>
+            <button class="close-btn" onclick="toggleShop()">Fechar</button>
+        </div>
 
-    <div id="bottom-ui">
-        <div class="tool active" id="tool-hoe" onclick="selectTool('hoe')">🥔<br>Enxada</div>
-        <div class="tool" id="tool-seed" onclick="selectTool('seed')">🌱<br>Plantar</div>
-        <div class="tool" id="tool-shovel" onclick="selectTool('shovel')">⛏️<br>Pá</div>
-        <div class="tool" id="tool-sword" onclick="selectTool('sword')">⚔️<br>Atacar</div>
-        <div class="tool shop-btn" onclick="toggleShop()">💰<br>Loja</div>
+        <div id="bottom-ui">
+            <div class="tool active" id="tool-hoe" onclick="selectTool('hoe')">🥔<br>Enxada</div>
+            <div class="tool" id="tool-seed" onclick="selectTool('seed')">🌱<br>Plantar</div>
+            <div class="tool" id="tool-shovel" onclick="selectTool('shovel')">⛏️<br>Pá</div>
+            <div class="tool" id="tool-sword" onclick="selectTool('sword')">⚔️<br>Atacar</div>
+            <div class="tool shop-btn" onclick="toggleShop()">💰<br>Loja</div>
+        </div>
     </div>
 
     <script src="script.js"></script>
