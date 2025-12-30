@@ -3,40 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Vida de Aldeão 3D</title>
+    <title>Aldeão Survival</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
+    <div id="ui-top">
+        <span>🌙 Noite: <b id="night-txt">1</b></span>
+        <span>⏳ <b id="time-txt">60</b>s</span>
+        <span>🌾 <b id="wheat-txt">0</b></span>
+    </div>
 
-    <div id="ui-layer">
-        <div id="top-ui">
-            <div class="stat-box">🌙 Noite: <span id="night-count">1</span></div>
-            <div class="stat-box">⏳ <span id="time-left">60</span>s</div>
-            <div class="stat-box">🌾 <span id="wheat-count">0</span></div>
-        </div>
+    <canvas id="gameCanvas"></canvas>
 
-        <div id="crosshair">+</div>
+    <div id="shop-modal" class="hidden">
+        <h3>🏪 MERCADOR</h3>
+        <button onclick="buy('seed')">🌱 Semente (1 Trigo)</button>
+        <button onclick="buy('dirt')">🟫 Bloco Terra (5 Trigo)</button>
+        <button onclick="buy('golem')">🤖 Golem (50 Trigo)</button>
+        <button onclick="upgradeSword()">⚔️ Melhorar Espada (200 Trigo)</button>
+        <p>Espada: <span id="sword-txt">Madeira</span></p>
+        <button class="close" onclick="toggleShop()">SAIR</button>
+    </div>
 
-        <div id="shop-modal" class="hidden">
-            <h2>🏪 Loja 3D</h2>
-            <button onclick="buyItem('seed')">🌱 Semente (1 Trigo)</button>
-            <button onclick="buyItem('dirt')">🟫 Bloco Terra (5 Trigo)</button>
-            <button onclick="buyItem('golem')">🤖 Golem (50 Trigo)</button>
-            <hr>
-            <h3>⚔️ Ferreiro</h3>
-            <p>Espada: <span id="sword-name">Madeira</span></p>
-            <button onclick="upgradeSword()">Evoluir (200 Trigo)</button>
-            <button class="close-btn" onclick="toggleShop()">Fechar</button>
-        </div>
-
-        <div id="bottom-ui">
-            <div class="tool active" id="tool-hoe" onclick="selectTool('hoe')">🥔<br>Enxada</div>
-            <div class="tool" id="tool-seed" onclick="selectTool('seed')">🌱<br>Plantar</div>
-            <div class="tool" id="tool-shovel" onclick="selectTool('shovel')">⛏️<br>Pá</div>
-            <div class="tool" id="tool-sword" onclick="selectTool('sword')">⚔️<br>Atacar</div>
-            <div class="tool shop-btn" onclick="toggleShop()">💰<br>Loja</div>
-        </div>
+    <div id="inventory">
+        <div class="slot active" onclick="setTool('hoe', this)">Enxada</div>
+        <div class="slot" onclick="setTool('seed', this)">Plantar</div>
+        <div class="slot" onclick="setTool('shovel', this)">Pá/Colher</div>
+        <div class="slot" onclick="setTool('sword', this)">Espada</div>
+        <div class="slot shop-btn" onclick="toggleShop()">LOJA</div>
     </div>
 
     <script src="script.js"></script>
