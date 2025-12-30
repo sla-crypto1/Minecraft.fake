@@ -1,36 +1,41 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-<meta charset="UTF-8">
-<title>Village Nightfall 3D</title>
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vida de Aldeão TD</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div id="topHud">
-  🌾 <span id="wheat">0</span>
-  🌙 Noites: <span id="nights">0</span>
-  ⏳ Noite em: <span id="timer">0</span>s
-</div>
+    <div id="top-ui">
+        <div class="stat-box">🌙 Noite: <span id="night-count">1</span></div>
+        <div class="stat-box">⏳ Tempo: <span id="time-left">60</span>s</div>
+        <div class="stat-box">🌾 Trigo: <span id="wheat-count">0</span></div>
+    </div>
 
-<div id="hud">
-  <b>Ferramentas</b>
-  <button onclick="setTool('hoe')">Enxada</button>
-  <button onclick="setTool('shovel')">Pá</button>
-  <button onclick="setTool('sword')">Espada</button>
+    <canvas id="gameCanvas"></canvas>
 
-  <br><br>
-  <b>Vendedor</b>
-  <button onclick="buySeed()">Semente (1)</button>
-  <button onclick="buyLand()">Terra (5)</button>
-  <button onclick="buyGolem()">Golem (50)</button>
+    <div id="shop-modal" class="hidden">
+        <h2>🏪 Loja do Aldeão</h2>
+        <button onclick="buyItem('seed')">🌱 Semente (1 Trigo)</button>
+        <button onclick="buyItem('dirt')">🟫 Bloco de Terra (5 Trigo)</button>
+        <button onclick="buyItem('golem')">🤖 Golem de Ferro (50 Trigo)</button>
+        <hr>
+        <h3>⚔️ Ferreiro</h3>
+        <p>Atual: <span id="sword-name">Madeira</span></p>
+        <button onclick="upgradeSword()">Evoluir Espada (200 Trigo)</button>
+        <button class="close-btn" onclick="toggleShop()">Fechar</button>
+    </div>
 
-  <br><br>
-  <b>Espada</b>
-  <button onclick="upgradeSword()">Upgrade (200)</button>
-</div>
+    <div id="bottom-ui">
+        <div class="tool active" id="tool-hoe" onclick="selectTool('hoe')">🥔<br>Enxada</div>
+        <div class="tool" id="tool-seed" onclick="selectTool('seed')">🌱<br>Plantar</div>
+        <div class="tool" id="tool-shovel" onclick="selectTool('shovel')">⛏️<br>Pá</div>
+        <div class="tool" id="tool-sword" onclick="selectTool('sword')">⚔️<br>Atacar</div>
+        <div class="tool shop-btn" onclick="toggleShop()">💰<br>Loja</div>
+    </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-<script src="game.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
