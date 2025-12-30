@@ -1,351 +1,398 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+// --- CONFIGURAÇÃO THREE.JS ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB); // Céu azul
+scene.fog = new THREE.Fog(0x87CEEB, 20, 60);
 
-// --- CONFIGURAÇÕES GERAIS ---
-let tileSize = 40; // Tamanho do bloco
-let cols, rows;
-let offsetX = 0, offsetY = 0;
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+// Posiciona a câmera em estilo "Isometrico/RTS"
+camera.position.set(0, 15, 15);
+camera.lookAt(0, 0, 0);
 
-// --- ESTADO DO JOGO (Dados para salvar) ---
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+// Luzes
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(10, 20, 10);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
+scene.add(dirLight);
+
+// Raycaster para interação (Toque/Clique)
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+// --- ESTADO DO JOGO ---
 let gameData = {
     wheat: 0,
-    nightCount: 1,
     seeds: 5,
-    swordLevel: 0, // 0: Madeira, 1: Pedra, 2: Ferro, 3: Diamante, 4: Netherite
-    map: [], // Grid do mapa
+    nightCount: 1,
+    swordLevel: 0,
+    mapData: {}, // Guardar estado dos blocos por coordenada "x,z"
     golems: []
 };
 
-// --- VARIÁVEIS DE CONTROLE ---
-let isNight = false;
-let dayTime = 60; // Duração do dia em segundos
-let timer = dayTime;
-let lastTime = Date.now();
+let tiles = []; // Array de meshes dos blocos
 let zombies = [];
+let crops = []; // Array de meshes das plantas
+let isNight = false;
+let timer = 60;
+let lastTime = Date.now();
 let selectedTool = 'hoe';
+const swordDmgs = [1, 3, 6, 10, 25];
 const swordNames = ["Madeira", "Pedra", "Ferro", "Diamante", "Netherite"];
-const swordDmgs = [1, 2, 4, 8, 20];
 
-// --- INICIALIZAÇÃO ---
-function init() {
-    resizeCanvas();
-    loadGame();
-    if (gameData.map.length === 0) createInitialMap();
-    window.requestAnimationFrame(loop);
-    setInterval(gameLogicPerSecond, 1000);
-}
+// --- MATERIAIS ---
+const matGrass = new THREE.MeshStandardMaterial({ color: 0x2d5a27 });
+const matDirt = new THREE.MeshStandardMaterial({ color: 0x5d3a1a });
+const matTilled = new THREE.MeshStandardMaterial({ color: 0x3e2712 });
+const matWheatGreen = new THREE.MeshStandardMaterial({ color: 0x32cd32 });
+const matWheatGold = new THREE.MeshStandardMaterial({ color: 0xd4af37 });
+const matZombie = new THREE.MeshStandardMaterial({ color: 0x2e8b57 });
+const matGolem = new THREE.MeshStandardMaterial({ color: 0xb0c4de });
 
-function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    // Centraliza o mapa inicial
-    cols = Math.ceil(canvas.width / tileSize);
-    rows = Math.ceil(canvas.height / tileSize);
-}
+// --- INICIALIZAÇÃO DO MAPA ---
+const mapSize = 9; // Tamanho inicial 9x9
+const tileSize = 2; // Tamanho visual do bloco
 
-function createInitialMap() {
-    // Cria um grid 20x20, mas só o centro tem terra (5x5)
-    let mapSize = 20;
-    for (let y = 0; y < mapSize; y++) {
-        let row = [];
-        for (let x = 0; x < mapSize; x++) {
-            // Se estiver no centro, é terra (tipo 1), senão é vazio (tipo 0)
-            let isCenter = x > 7 && x < 13 && y > 7 && y < 13;
-            row.push({
-                type: isCenter ? 1 : 0, 
-                tilled: false,
-                crop: 0, // 0: nada, 1-99: crescendo, 100: maduro
-                hasGolem: false
-            });
-        }
-        gameData.map.push(row);
+function createBlock(x, z, type) {
+    const geo = new THREE.BoxGeometry(tileSize, tileSize, tileSize);
+    const mesh = new THREE.Mesh(geo, type === 'grass' ? matGrass : matDirt);
+    mesh.position.set(x * tileSize, -tileSize/2, z * tileSize);
+    mesh.receiveShadow = true;
+    
+    // Dados customizados no objeto 3D
+    mesh.userData = {
+        isTile: true,
+        x: x, 
+        z: z, 
+        type: type, // 'grass', 'dirt'
+        tilled: false,
+        hasCrop: false,
+        cropMesh: null,
+        hasGolem: false
+    };
+
+    scene.add(mesh);
+    tiles.push(mesh);
+    
+    // Salva no gameData se não existir
+    let key = `${x},${z}`;
+    if(!gameData.mapData[key]) {
+        gameData.mapData[key] = { type: type, tilled: false };
     }
-    // Centraliza a visão
-    offsetX = (canvas.width - mapSize * tileSize) / 2;
-    offsetY = (canvas.height - mapSize * tileSize) / 2;
 }
 
-// --- LÓGICA DO JOGO ---
-function loop() {
-    update();
-    draw();
-    window.requestAnimationFrame(loop);
+function initMap() {
+    for(let x = -3; x <= 3; x++) {
+        for(let z = -3; z <= 3; z++) {
+            createBlock(x, z, 'grass');
+        }
+    }
 }
 
+// --- FUNÇÕES DE UPDATE E LÓGICA ---
 function update() {
-    // Crescimento das plantas (rápido)
-    if (!isNight) {
-        gameData.map.forEach(row => {
-            row.forEach(tile => {
-                if (tile.crop > 0 && tile.crop < 100) {
-                    tile.crop += 0.2; // Velocidade de crescimento
+    const dt = (Date.now() - lastTime) / 1000;
+    lastTime = Date.now();
+
+    // Ciclo Dia/Noite Visual
+    if(isNight) {
+        scene.background.setHex(0x1a1a2e);
+        scene.fog.color.setHex(0x1a1a2e);
+        ambientLight.intensity = 0.2;
+    } else {
+        scene.background.setHex(0x87CEEB);
+        scene.fog.color.setHex(0x87CEEB);
+        ambientLight.intensity = 0.6;
+        
+        // Crescimento das plantas
+        crops.forEach(crop => {
+            if(crop.userData.growth < 100) {
+                crop.userData.growth += 0.3; // Velocidade
+                let scale = 0.2 + (crop.userData.growth / 100) * 0.8;
+                crop.scale.set(1, scale, 1);
+                crop.position.y = (scale * tileSize)/2 - tileSize/2; // Ajusta altura base
+                
+                if(crop.userData.growth >= 100) {
+                    crop.material = matWheatGold;
                 }
-            });
+            }
         });
     }
 
-    // Lógica dos Zumbis
-    zombies.forEach((z, index) => {
-        // Move em direção ao centro do mapa (aprox)
-        let centerX = (gameData.map[0].length * tileSize) / 2 + offsetX;
-        let centerY = (gameData.map.length * tileSize) / 2 + offsetY;
-        
-        let dx = centerX - z.x;
-        let dy = centerY - z.y;
-        let dist = Math.sqrt(dx*dx + dy*dy);
-        
-        z.x += (dx / dist) * z.speed;
-        z.y += (dy / dist) * z.speed;
+    // Zumbis
+    zombies.forEach((z, i) => {
+        // Move para o centro (0,0,0)
+        let dir = new THREE.Vector3(0 - z.position.x, 0, 0 - z.position.z).normalize();
+        z.position.add(dir.multiplyScalar(z.userData.speed * dt));
+        z.lookAt(0, z.position.y, 0);
 
-        // Dano do Golem
+        // Colisão com Golems (Raio de defesa)
         gameData.golems.forEach(g => {
-            let gx = g.c * tileSize + offsetX;
-            let gy = g.r * tileSize + offsetY;
-            let distToGolem = Math.sqrt((z.x - gx)**2 + (z.y - gy)**2);
-            if (distToGolem < 60) {
-                z.hp -= 0.5; // Golem bate
+            let dist = z.position.distanceTo(g.mesh.position);
+            if(dist < 5) {
+                z.userData.hp -= 0.1; // Dano do Golem
+                // Efeito visual de ataque poderia ser adicionado aqui
             }
         });
 
-        if (z.hp <= 0) zombies.splice(index, 1);
+        if(z.userData.hp <= 0) {
+            scene.remove(z);
+            zombies.splice(i, 1);
+        }
     });
 }
 
-function gameLogicPerSecond() {
-    if (!isNight) {
+function oneSecondLogic() {
+    if(!isNight) {
         timer--;
-        if (timer <= 0) startNight();
+        if(timer <= 0) startNight();
     } else {
-        // Checar se acabou a noite (todos zumbis mortos)
-        if (zombies.length === 0) endNight();
+        if(zombies.length === 0 && timer <= 0) endNight(); // Fim da noite se matou tudo
     }
-    
     updateUI();
-    saveGame(); // Salva auto a cada segundo
 }
 
 function startNight() {
     isNight = true;
-    timer = 0;
-    // Spawnar zumbis baseado no nº da noite
-    let amount = 3 + Math.floor(gameData.nightCount * 1.5);
-    for(let i=0; i<amount; i++) {
-        spawnZombie();
-    }
-    alert(`🌑 A NOITE ${gameData.nightCount} COMEÇOU! Proteja a vila!`);
+    timer = 0; // Timer para de contar dia
+    alert(`🌑 A Noite ${gameData.nightCount} chegou!`);
+    
+    // Spawna Zumbis
+    let amount = 3 + gameData.nightCount;
+    for(let i=0; i<amount; i++) spawnZombie();
 }
 
 function endNight() {
     isNight = false;
-    timer = dayTime;
+    timer = 60;
     gameData.nightCount++;
-    alert("☀️ O sol nasceu! Cultive e prepare-se.");
+    alert("☀️ Amanheceu!");
 }
 
 function spawnZombie() {
-    let side = Math.floor(Math.random() * 4);
-    let x, y;
-    switch(side) {
-        case 0: x = Math.random() * canvas.width; y = -50; break; // Top
-        case 1: x = canvas.width + 50; y = Math.random() * canvas.height; break; // Right
-        case 2: x = Math.random() * canvas.width; y = canvas.height + 50; break; // Bottom
-        case 3: x = -50; y = Math.random() * canvas.height; break; // Left
-    }
-    // Zumbi HP escala com as noites
-    zombies.push({ x: x, y: y, hp: 3 + gameData.nightCount, speed: 1 + (gameData.nightCount * 0.1) });
+    const dist = 20;
+    const angle = Math.random() * Math.PI * 2;
+    const x = Math.cos(angle) * dist;
+    const z = Math.sin(angle) * dist;
+
+    const geo = new THREE.BoxGeometry(1, 2, 1);
+    const mesh = new THREE.Mesh(geo, matZombie);
+    mesh.position.set(x, 1, z);
+    mesh.castShadow = true;
+    mesh.userData = { hp: 3 + gameData.nightCount, speed: 2 + (gameData.nightCount * 0.1) };
+    
+    scene.add(mesh);
+    zombies.push(mesh);
 }
 
-// --- DESENHO ---
-function draw() {
-    ctx.fillStyle = isNight ? '#1a1a2e' : '#87CEEB';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+// --- INTERAÇÃO (RAYCAST) ---
+function onTouch(event) {
+    // Calcula posição do mouse/toque normalizada (-1 a +1)
+    let clientX, clientY;
+    if(event.changedTouches) {
+        clientX = event.changedTouches[0].clientX;
+        clientY = event.changedTouches[0].clientY;
+    } else {
+        clientX = event.clientX;
+        clientY = event.clientY;
+    }
 
-    // Desenha Mapa
-    for (let r = 0; r < gameData.map.length; r++) {
-        for (let c = 0; c < gameData.map[r].length; c++) {
-            let tile = gameData.map[r][c];
-            let x = c * tileSize + offsetX;
-            let y = r * tileSize + offsetY;
+    mouse.x = (clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(clientY / window.innerHeight) * 2 + 1;
 
-            if (tile.type === 1) { // Terra
-                ctx.fillStyle = tile.tilled ? '#6b4423' : '#2d5a27'; // Arado vs Grama
-                ctx.fillRect(x, y, tileSize, tileSize);
-                ctx.strokeStyle = '#1e3c1a';
-                ctx.strokeRect(x, y, tileSize, tileSize);
+    raycaster.setFromCamera(mouse, camera);
 
-                // Planta
-                if (tile.crop > 0) {
-                    let growthColor = tile.crop >= 100 ? '#d4af37' : '#32cd32'; // Dourado maduro / Verde crescendo
-                    let size = (tile.crop / 100) * (tileSize - 10);
-                    ctx.fillStyle = growthColor;
-                    ctx.fillRect(x + 5, y + 5, size, size);
+    // 1. Checa Zumbis (Prioridade de ataque)
+    const intersectsZombies = raycaster.intersectObjects(zombies);
+    if(selectedTool === 'sword' && intersectsZombies.length > 0) {
+        let z = intersectsZombies[0].object;
+        z.userData.hp -= swordDmgs[gameData.swordLevel];
+        // Particula ou flash vermelho seria legal aqui
+        z.material = new THREE.MeshBasicMaterial({color: 0xff0000});
+        setTimeout(() => z.material = matZombie, 100);
+        return;
+    }
+
+    // 2. Checa Blocos
+    const intersectsTiles = raycaster.intersectObjects(tiles);
+    if(intersectsTiles.length > 0) {
+        let hit = intersectsTiles[0];
+        let tile = hit.object;
+
+        if(selectedTool === 'hoe') {
+            if(tile.userData.type === 'grass' && !tile.userData.tilled) {
+                tile.material = matTilled;
+                tile.userData.tilled = true;
+            }
+        } 
+        else if(selectedTool === 'seed') {
+            if(tile.userData.tilled && !tile.userData.hasCrop && gameData.seeds > 0) {
+                plantCrop(tile);
+                gameData.seeds--;
+            }
+        }
+        else if(selectedTool === 'shovel') {
+            if(tile.userData.hasCrop && tile.userData.cropMesh.userData.growth >= 100) {
+                // Colher
+                harvest(tile);
+            } else if (!tile.userData.hasCrop) {
+                // Remover bloco (exceto o centro 0,0 para não cair no limbo)
+                if(tile.userData.x !== 0 || tile.userData.z !== 0) {
+                   // Implementar remoção se quiser
                 }
             }
         }
-    }
-
-    // Desenha Golems
-    gameData.golems.forEach(g => {
-        let x = g.c * tileSize + offsetX;
-        let y = g.r * tileSize + offsetY;
-        ctx.fillStyle = '#b0c4de'; // Ferro
-        ctx.beginPath();
-        ctx.arc(x + tileSize/2, y + tileSize/2, 15, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = 'red'; // Olhos
-        ctx.fillRect(x + 15, y + 10, 4, 4);
-        ctx.fillRect(x + 21, y + 10, 4, 4);
-    });
-
-    // Desenha Zumbis
-    zombies.forEach(z => {
-        ctx.fillStyle = '#2e8b57'; // Verde zumbi
-        ctx.fillRect(z.x - 10, z.y - 10, 20, 20);
-        ctx.fillStyle = 'red'; // Barra vida
-        ctx.fillRect(z.x - 10, z.y - 15, z.hp * 2, 3);
-    });
-}
-
-// --- INTERAÇÃO ---
-canvas.addEventListener('pointerdown', (e) => {
-    let x = e.clientX - offsetX;
-    let y = e.clientY - offsetY;
-    let c = Math.floor(x / tileSize);
-    let r = Math.floor(y / tileSize);
-
-    // Verifica se clicou num zumbi (Ataque)
-    if (selectedTool === 'sword') {
-        let hit = false;
-        zombies.forEach((z, i) => {
-            if (Math.abs(z.x - e.clientX) < 30 && Math.abs(z.y - e.clientY) < 30) {
-                z.hp -= swordDmgs[gameData.swordLevel];
-                // Efeito visual de hit poderia ser aqui
-                hit = true;
-            }
-        });
-        if(hit) return;
-    }
-
-    // Verifica limites do mapa
-    if (r >= 0 && r < gameData.map.length && c >= 0 && c < gameData.map[0].length) {
-        let tile = gameData.map[r][c];
-
-        if (selectedTool === 'hoe') {
-            if (tile.type === 1 && !tile.tilled && tile.crop === 0) {
-                tile.tilled = true;
-            }
-        } else if (selectedTool === 'seed') {
-            if (tile.tilled && tile.crop === 0 && gameData.seeds > 0) {
-                tile.crop = 1;
-                gameData.seeds--;
-                updateUI();
-            }
-        } else if (selectedTool === 'shovel') {
-            // Se tem planta madura, colhe
-            if (tile.crop >= 100) {
-                tile.crop = 0;
-                tile.tilled = false; // Terra volta ao normal
-                gameData.wheat += 3;
-                updateUI();
-            } else if (tile.type === 1 && tile.crop === 0) {
-                // Remove bloco de terra se estiver vazio (recupera 2 trigos?)
-                tile.type = 0; 
-                tile.tilled = false;
-            }
-        } else if (selectedTool === 'place_dirt') {
-             // Expansão: Coloca terra se for vazio
-             if (tile.type === 0 && gameData.wheat >= 5) {
-                 tile.type = 1;
-                 gameData.wheat -= 5;
-                 updateUI();
-                 selectTool('hoe'); // Volta pra enxada
-             }
-        } else if (selectedTool === 'place_golem') {
-            if (tile.type === 1 && !tile.hasGolem && gameData.wheat >= 50) {
-                gameData.golems.push({r: r, c: c});
-                tile.hasGolem = true;
+        else if(selectedTool === 'place_dirt') {
+             // Lógica complexa de colocar bloco ao lado. 
+             // Simplificado: Transforma bloco selecionado (se fosse um "grid vazio") 
+             // Mas aqui vamos fazer expansão fixa ou spawnar novo bloco.
+             // Para simplificar mobile: Compra "expande" o mapa automaticamente nas bordas no futuro
+             // AQUI: Vamos permitir clicar fora do mapa? Não. 
+             // Vamos fazer assim: Clicar num bloco existente com Terra cria um bloco em cima? Não, estilo Minecraft é lado.
+             // Solução Simples: Expande o grid aleatoriamente ou em espiral quando compra.
+        }
+        else if(selectedTool === 'place_golem') {
+            if(!tile.userData.hasGolem && !tile.userData.hasCrop && gameData.wheat >= 50) {
+                spawnGolem(tile);
                 gameData.wheat -= 50;
                 selectTool('hoe');
             }
         }
     }
-});
-
-// --- UI E LOJA ---
-function selectTool(tool) {
-    selectedTool = tool;
-    document.querySelectorAll('.tool').forEach(el => el.classList.remove('active'));
-    
-    // Se for ferramenta especial (terra/golem), não tem botão fixo, ativa visualmente a lógica
-    if(tool !== 'place_dirt' && tool !== 'place_golem') {
-        document.getElementById('tool-' + tool).classList.add('active');
-    }
+    updateUI();
 }
 
+function plantCrop(tile) {
+    const geo = new THREE.BoxGeometry(1, 0.2, 1); // Começa pequeno
+    const mesh = new THREE.Mesh(geo, matWheatGreen);
+    mesh.position.set(tile.position.x, -0.8, tile.position.z); // Um pouco acima do chão
+    mesh.userData = { growth: 0 };
+    
+    scene.add(mesh);
+    crops.push(mesh);
+    
+    tile.userData.hasCrop = true;
+    tile.userData.cropMesh = mesh;
+}
+
+function harvest(tile) {
+    scene.remove(tile.userData.cropMesh);
+    // Remove do array de crops
+    crops = crops.filter(c => c !== tile.userData.cropMesh);
+    
+    tile.userData.hasCrop = false;
+    tile.userData.cropMesh = null;
+    tile.userData.tilled = false; // Volta a ser terra arada vazia (ou grama?)
+    tile.material = matDirt; // Vira terra normal
+    
+    gameData.wheat += 3;
+}
+
+function spawnGolem(tile) {
+    const geo = new THREE.CylinderGeometry(0.8, 0.8, 3, 8);
+    const mesh = new THREE.Mesh(geo, matGolem);
+    mesh.position.set(tile.position.x, 1.5, tile.position.z);
+    mesh.castShadow = true;
+    scene.add(mesh);
+    
+    tile.userData.hasGolem = true;
+    gameData.golems.push({ mesh: mesh });
+}
+
+// --- UI E LOJA ---
 function updateUI() {
     document.getElementById('wheat-count').innerText = Math.floor(gameData.wheat);
     document.getElementById('night-count').innerText = gameData.nightCount;
     document.getElementById('time-left').innerText = timer;
     document.getElementById('sword-name').innerText = swordNames[gameData.swordLevel];
-    
-    // Atualiza texto do botão plantar com qtd sementes
     document.getElementById('tool-seed').innerHTML = `🌱<br>${gameData.seeds}`;
 }
 
-function toggleShop() {
-    let modal = document.getElementById('shop-modal');
-    modal.classList.toggle('hidden');
+function selectTool(t) { 
+    selectedTool = t; 
+    document.querySelectorAll('.tool').forEach(e => e.classList.remove('active'));
+    if(t !== 'place_dirt' && t !== 'place_golem') document.getElementById('tool-'+t).classList.add('active');
 }
 
+function toggleShop() { document.getElementById('shop-modal').classList.toggle('hidden'); }
+
 function buyItem(item) {
-    if (item === 'seed') {
-        if (gameData.wheat >= 1) {
-            gameData.wheat -= 1;
-            gameData.seeds++;
-        }
-    } else if (item === 'dirt') {
-        alert("Toque num espaço vazio preto para colocar a terra!");
-        toggleShop();
-        selectTool('place_dirt');
-        return;
-    } else if (item === 'golem') {
-        if (gameData.wheat >= 50) {
-            alert("Toque em um bloco de grama para colocar o Golem!");
+    if(item === 'seed' && gameData.wheat >= 1) {
+        gameData.wheat--; gameData.seeds++;
+    }
+    else if(item === 'golem') {
+        if(gameData.wheat >= 50) {
+            alert("Toque no chão para colocar o Golem!");
             toggleShop();
             selectTool('place_golem');
             return;
         }
     }
+    else if(item === 'dirt') {
+        if(gameData.wheat >= 5) {
+            // Expansão Automática (Mais fácil pra mobile que mirar no vazio)
+            expandMap();
+            gameData.wheat -= 5;
+        }
+    }
     updateUI();
+}
+
+function expandMap() {
+    // Simples expansão: Adiciona uma linha/coluna nova aleatória ou fixa
+    // Para simplificar o código: Adiciona um bloco em uma posição vazia adjacente
+    // Hack rápido: Sorteia uma posição x,z próxima
+    let range = 4 + Math.floor(tiles.length / 10);
+    let x = Math.floor(Math.random() * range * 2) - range;
+    let z = Math.floor(Math.random() * range * 2) - range;
+    
+    // Verifica se já existe
+    let exists = tiles.some(t => t.userData.x === x && t.userData.z === z);
+    if(!exists) {
+        createBlock(x, z, 'grass');
+        alert("Mapa expandido!");
+    } else {
+        // Tenta de novo (recursão simples ou falha silenciosa pra economizar codigo)
+        gameData.wheat += 5; // Devolve o dinheiro se falhar
+    }
 }
 
 function upgradeSword() {
-    if (gameData.swordLevel < 4) {
-        if (gameData.wheat >= 200) {
-            gameData.wheat -= 200;
-            gameData.swordLevel++;
-            updateUI();
-        } else {
-            alert("Trigo insuficiente (Precisa de 200)!");
-        }
-    } else {
-        alert("Espada já está no nível máximo (Netherite)!");
-    }
-}
-
-// --- SAVE SYSTEM ---
-function saveGame() {
-    localStorage.setItem('villagerTD_save', JSON.stringify(gameData));
-}
-
-function loadGame() {
-    let saved = localStorage.getItem('villagerTD_save');
-    if (saved) {
-        gameData = JSON.parse(saved);
-        // Recalcular Golems no mapa (opcional para consistência visual)
+    if(gameData.wheat >= 200 && gameData.swordLevel < 4) {
+        gameData.wheat -= 200;
+        gameData.swordLevel++;
     }
     updateUI();
 }
 
-// Inicia
-init();
+// --- EVENTOS E LOOP ---
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Suporte a Mouse e Touch
+window.addEventListener('mousedown', onTouch);
+window.addEventListener('touchstart', (e) => {
+    // e.preventDefault(); // Opcional, cuidado ao bloquear UI
+    onTouch(e);
+}, {passive: false});
+
+initMap();
+setInterval(oneSecondLogic, 1000);
+
+function animate() {
+    requestAnimationFrame(animate);
+    update();
+    renderer.render(scene, camera);
+}
+animate();
