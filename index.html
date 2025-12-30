@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Village Nightfall 3D</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="topHud">
+  🌾 <span id="wheat">0</span>
+  🌙 Noites: <span id="nights">0</span>
+  ⏳ Noite em: <span id="timer">0</span>s
+</div>
+
+<div id="hud">
+  <b>Ferramentas</b>
+  <button onclick="setTool('hoe')">Enxada</button>
+  <button onclick="setTool('shovel')">Pá</button>
+  <button onclick="setTool('sword')">Espada</button>
+
+  <br><br>
+  <b>Vendedor</b>
+  <button onclick="buySeed()">Semente (1)</button>
+  <button onclick="buyLand()">Terra (5)</button>
+  <button onclick="buyGolem()">Golem (50)</button>
+
+  <br><br>
+  <b>Espada</b>
+  <button onclick="upgradeSword()">Upgrade (200)</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
